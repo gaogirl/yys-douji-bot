@@ -27,8 +27,9 @@ echo.
 
 echo [3/3] 打包程序...
 pyinstaller --noconfirm --windowed --onefile ^
-    --name "阴阳师斗技自动挂机" ^
+    --name "阴阳师斗技&御魂自动化工具" ^
     --add-data "templates;templates" ^
+    --add-data "logs;logs" ^
     --hidden-import=win32gui ^
     --hidden-import=win32ui ^
     --hidden-import=win32con ^
@@ -54,7 +55,8 @@ xcopy /E /Y templates\* dist\templates\ >nul
 echo.
 echo ========================================
 echo 打包完成！
-echo 可执行文件: dist\阴阳师斗技自动挂机.exe
+echo 可执行文件: dist\阴阳师斗技&御魂自动化工具.exe
 echo 模板图片请放入: dist\templates\
+echo 操作记录保存在: dist\logs\
 echo ========================================
 pause

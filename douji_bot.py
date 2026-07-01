@@ -31,13 +31,14 @@ class StopReason(Enum):
 
 class DoujiBot:
     def __init__(self, window_manager, image_recognition, auto_clicker, stats=None,
-                 selection_handler=None, team_manager=None):
+                 selection_handler=None, team_manager=None, md_logger=None):
         self.window_manager = window_manager
         self.image_recognition = image_recognition
         self.auto_clicker = auto_clicker
         self.stats = stats
         self.selection_handler = selection_handler
         self.team_manager = team_manager
+        self.md_logger = md_logger
 
         self.state = DoujiState.IDLE
         self.running = False
@@ -88,6 +89,11 @@ class DoujiBot:
     def log(self, message):
         if self.log_callback:
             self.log_callback(message)
+
+    def _md_log(self, action_type, detail, confidence=None):
+        """通过 MdLogger 记录一步操作。"""
+        if self.md_logger:
+            self.md_logger.log(action_type, detail, confidence)
 
     def set_state(self, state):
         self.state = state
@@ -224,6 +230,7 @@ class DoujiBot:
         if battle_btn:
             self.log(f"找到'战'按钮，置信度: {battle_btn['confidence']:.2f}")
             self.auto_clicker.click_match_result(battle_btn)
+            self._md_log("点击", "进入斗技匹配", battle_btn['confidence'])
             self.retry_count = 0
             self._selecting_done = False
             self.set_state(DoujiState.SELECTING)
@@ -255,6 +262,7 @@ class DoujiBot:
 
             self.log(f"找到'确定'按钮，置信度: {confirm_result['confidence']:.2f}")
             self.auto_clicker.click_match_result(confirm_result)
+            self._md_log("点击", "斗技确认", confirm_result['confidence'])
             self.log("已点击'确定'，等待对手...")
             time.sleep(CLICK_INTERVAL)
         else:
@@ -297,6 +305,7 @@ class DoujiBot:
             self.log(f"找到'手动'按钮，置信度: {manual_result['confidence']:.2f}")
             self.auto_clicker.click_match_result(manual_result)
             self.log("已点击'手动'开启自动作战")
+            self._md_log("点击", "开启自动作战", manual_result['confidence'])
 
             if self.stats:
                 self.stats.start_battle()
@@ -345,8 +354,10 @@ class DoujiBot:
 
             if result == 'victory':
                 self.log("战斗胜利！")
+                self._md_log("结算", "战斗胜利", 0.95)
             else:
                 self.log("战斗失败")
+                self._md_log("结算", "战斗失败", 0.95)
 
             self._maybe_rotate_team(is_victory)
             self._update_stats()

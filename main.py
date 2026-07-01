@@ -8,20 +8,22 @@ from window_manager import WindowManager
 from image_recognition import ImageRecognition
 from auto_clicker import AutoClicker
 from douji_bot import DoujiBot
+from spirit_hub_bot import SpiritHubBot
 from battle_stats import BattleStats
 from hotkey_manager import GlobalHotkey
 from tray_manager import SystemTray
 from team_manager import TeamManager
 from selection_handler import SelectionHandler
+from md_logger import MdLogger
 from config import HOTKEY_TOGGLE, DEFAULT_CONFIDENCE
 
 
 class DoujiApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("阴阳师斗技自动挂机")
-        self.root.geometry("580x820")
-        self.root.resizable(False, False)
+        self.root.title("阴阳师斗技&御魂自动化工具")
+        self.root.geometry("950x620")
+        self.root.resizable(True, True)
 
         self.window_manager = WindowManager()
         self.image_recognition = ImageRecognition()
@@ -31,20 +33,38 @@ class DoujiApp:
         self.selection_handler = SelectionHandler(
             self.window_manager, self.image_recognition, self.auto_clicker
         )
-        self.bot = DoujiBot(
+
+        # 操作记录
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, f"operation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
+        self.md_logger = MdLogger(log_file)
+        self.log(f"操作记录已保存至: {log_file}")
+
+        self.douji_bot = DoujiBot(
             self.window_manager,
             self.image_recognition,
             self.auto_clicker,
             self.stats,
             self.selection_handler,
             self.team_manager,
+            self.md_logger,
+        )
+        self.spirit_bot = SpiritHubBot(
+            self.window_manager,
+            self.image_recognition,
+            self.auto_clicker,
+            self.md_logger,
         )
         self.hotkey = GlobalHotkey()
         self.tray = None
 
-        self.bot.set_log_callback(self._append_log)
-        self.bot.set_state_callback(self._update_state)
-        self.bot.set_stats_callback(self._update_stats_display)
+        self.douji_bot.set_log_callback(self._append_log)
+        self.douji_bot.set_state_callback(self._update_douji_state)
+        self.douji_bot.set_stats_callback(self._update_stats_display)
+
+        self.spirit_bot.set_log_callback(self._append_log)
+        self.spirit_bot.set_state_callback(self._update_spirit_state)
 
         self.confidence_var = tk.DoubleVar(value=DEFAULT_CONFIDENCE)
         self.max_battles_var = tk.StringVar(value="0")
@@ -56,6 +76,11 @@ class DoujiApp:
         self.rotate_on_loss_var = tk.BooleanVar(value=False)
         self.current_team_var = tk.StringVar(value="")
 
+        # 御魂相关变量
+        self.spirit_floor_var = tk.StringVar(value="8")
+        self.spirit_rounds_var = tk.StringVar(value="10")
+        self.spirit_mode_var = tk.StringVar(value="队长")
+
         self._create_widgets()
         self._setup_tray()
         self._setup_hotkey()
@@ -66,248 +91,254 @@ class DoujiApp:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _create_widgets(self):
-        main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # ===== 整体左右分栏 =====
+        main_pane = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_pane.pack(fill=tk.BOTH, expand=True)
 
+        # --- 左侧：功能面板 ---
+        left_frame = ttk.Frame(main_pane, width=520)
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=False)
+        main_pane.add(left_frame, weight=4)
+
+        # --- 右侧：日志 + 状态 ---
+        right_frame = ttk.Frame(main_pane, width=430)
+        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        main_pane.add(right_frame, weight=6)
+
+        # ===================== 右侧：运行状态 + 日志 =====================
         title_label = ttk.Label(
-            main_frame,
-            text="阴阳师斗技自动挂机",
-            font=("Microsoft YaHei", 16, "bold")
+            right_frame,
+            text="阴阳师斗技&御魂自动化工具",
+            font=("Microsoft YaHei", 14, "bold")
         )
-        title_label.pack(pady=(0, 10))
+        title_label.pack(pady=(5, 5))
 
-        status_frame = ttk.LabelFrame(main_frame, text="运行状态", padding="10")
-        status_frame.pack(fill=tk.X, pady=(0, 8))
+        # 状态面板
+        status_frame = ttk.LabelFrame(right_frame, text="运行状态", padding="8")
+        status_frame.pack(fill=tk.X, pady=(0, 5))
 
-        self.state_var = tk.StringVar(value="空闲")
-        state_label = ttk.Label(status_frame, text="当前状态:")
-        state_label.grid(row=0, column=0, sticky=tk.W)
-        self.state_value = ttk.Label(
-            status_frame,
-            textvariable=self.state_var,
-            foreground="blue",
-            font=("Microsoft YaHei", 10, "bold")
-        )
-        self.state_value.grid(row=0, column=1, sticky=tk.W, padx=(10, 0))
+        state_row = ttk.Frame(status_frame)
+        state_row.pack(fill=tk.X)
+        ttk.Label(state_row, text="斗技:").pack(side=tk.LEFT)
+        self.douji_state_var = tk.StringVar(value="空闲")
+        ttk.Label(state_row, textvariable=self.douji_state_var, foreground="blue").pack(side=tk.LEFT, padx=(0, 15))
+        ttk.Label(state_row, text="御魂:").pack(side=tk.LEFT)
+        self.spirit_state_var = tk.StringVar(value="空闲")
+        ttk.Label(state_row, textvariable=self.spirit_state_var, foreground="purple").pack(side=tk.LEFT)
 
-        self.battle_count_var = tk.StringVar(value="0")
-        count_label = ttk.Label(status_frame, text="本次场次:")
-        count_label.grid(row=0, column=2, sticky=tk.W, padx=(20, 0))
-        self.count_value = ttk.Label(
-            status_frame,
-            textvariable=self.battle_count_var,
-            foreground="green",
-            font=("Microsoft YaHei", 10, "bold")
-        )
-        self.count_value.grid(row=0, column=3, sticky=tk.W, padx=(10, 0))
-
-        win_label = ttk.Label(status_frame, text="胜:")
-        win_label.grid(row=1, column=0, sticky=tk.W, pady=(5, 0))
+        # 统计信息
+        stats_frame = ttk.Frame(status_frame)
+        stats_frame.pack(fill=tk.X, pady=(5, 0))
+        col_widths = [45, 45, 45, 55]
+        for i, label in enumerate(["胜", "负", "胜率", "场次"]):
+            ttk.Label(stats_frame, text=label).grid(row=0, column=i, padx=5)
         self.win_var = tk.StringVar(value="0")
-        ttk.Label(status_frame, textvariable=self.win_var, foreground="green").grid(
-            row=1, column=1, sticky=tk.W, padx=(10, 0), pady=(5, 0))
-
-        lose_label = ttk.Label(status_frame, text="负:")
-        lose_label.grid(row=1, column=2, sticky=tk.W, padx=(20, 0), pady=(5, 0))
         self.lose_var = tk.StringVar(value="0")
-        ttk.Label(status_frame, textvariable=self.lose_var, foreground="red").grid(
-            row=1, column=3, sticky=tk.W, padx=(10, 0), pady=(5, 0))
-
-        rate_label = ttk.Label(status_frame, text="胜率:")
-        rate_label.grid(row=2, column=0, sticky=tk.W, pady=(5, 0))
         self.rate_var = tk.StringVar(value="0%")
-        ttk.Label(status_frame, textvariable=self.rate_var, foreground="orange").grid(
-            row=2, column=1, sticky=tk.W, padx=(10, 0), pady=(5, 0))
+        self.count_var = tk.StringVar(value="0")
+        for i, var in enumerate([self.win_var, self.lose_var, self.rate_var, self.count_var]):
+            ttk.Label(stats_frame, textvariable=var, foreground="green").grid(row=1, column=i, padx=5)
 
-        dur_label = ttk.Label(status_frame, text="时长:")
-        dur_label.grid(row=2, column=2, sticky=tk.W, padx=(20, 0), pady=(5, 0))
-        self.dur_var = tk.StringVar(value="0秒")
-        ttk.Label(status_frame, textvariable=self.dur_var).grid(
-            row=2, column=3, sticky=tk.W, padx=(10, 0), pady=(5, 0))
-
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=(0, 8))
-
-        self.start_button = ttk.Button(
-            button_frame,
-            text="开始挂机 (F6)",
-            command=self._start_bot,
-            width=18
-        )
-        self.start_button.pack(side=tk.LEFT, padx=(0, 8))
-
-        self.stop_button = ttk.Button(
-            button_frame,
-            text="停止挂机 (F6)",
-            command=self._stop_bot,
-            width=18,
-            state=tk.DISABLED
-        )
-        self.stop_button.pack(side=tk.LEFT)
-
-        self.tray_button = ttk.Button(
-            button_frame,
-            text="最小化到托盘",
-            command=self._hide_to_tray,
-            width=18
-        )
-        self.tray_button.pack(side=tk.RIGHT)
-
-        tool_frame = ttk.Frame(main_frame)
-        tool_frame.pack(fill=tk.X, pady=(0, 8))
-
-        self.detect_button = ttk.Button(
-            tool_frame,
-            text="检测游戏窗口",
-            command=self._detect_window,
-            width=14
-        )
-        self.detect_button.pack(side=tk.LEFT, padx=(0, 8))
-
-        self.template_button = ttk.Button(
-            tool_frame,
-            text="打开模板目录",
-            command=self._open_template_dir,
-            width=14
-        )
-        self.template_button.pack(side=tk.LEFT)
-
-        self.reset_stats_btn = ttk.Button(
-            tool_frame,
-            text="重置统计",
-            command=self._reset_stats,
-            width=14
-        )
-        self.reset_stats_btn.pack(side=tk.RIGHT)
-
-        settings_frame = ttk.LabelFrame(main_frame, text="挂机设置", padding="10")
-        settings_frame.pack(fill=tk.X, pady=(0, 8))
-
-        conf_frame = ttk.Frame(settings_frame)
-        conf_frame.pack(fill=tk.X, pady=(0, 8))
-
-        ttk.Label(conf_frame, text="识别灵敏度:").pack(side=tk.LEFT)
-        self.conf_scale = ttk.Scale(
-            conf_frame,
-            from_=0.5,
-            to=0.99,
-            orient=tk.HORIZONTAL,
-            variable=self.confidence_var,
-            command=self._on_confidence_change,
-            length=200
-        )
-        self.conf_scale.pack(side=tk.LEFT, padx=(10, 10))
-        self.conf_label = ttk.Label(conf_frame, text=f"{DEFAULT_CONFIDENCE:.2f}")
-        self.conf_label.pack(side=tk.LEFT)
-
-        limit_frame = ttk.Frame(settings_frame)
-        limit_frame.pack(fill=tk.X)
-
-        ttk.Label(limit_frame, text="最多场次:").pack(side=tk.LEFT)
-        self.battles_entry = ttk.Entry(
-            limit_frame,
-            textvariable=self.max_battles_var,
-            width=8
-        )
-        self.battles_entry.pack(side=tk.LEFT, padx=(5, 15))
-        ttk.Label(limit_frame, text="(0=不限制)").pack(side=tk.LEFT)
-
-        ttk.Label(limit_frame, text="最长分钟:").pack(side=tk.LEFT, padx=(20, 0))
-        self.minutes_entry = ttk.Entry(
-            limit_frame,
-            textvariable=self.max_minutes_var,
-            width=8
-        )
-        self.minutes_entry.pack(side=tk.LEFT, padx=(5, 15))
-        ttk.Label(limit_frame, text="(0=不限制)").pack(side=tk.LEFT)
-
-        team_frame = ttk.LabelFrame(main_frame, text="阵容设置", padding="10")
-        team_frame.pack(fill=tk.X, pady=(0, 8))
-
-        auto_sel_row = ttk.Frame(team_frame)
-        auto_sel_row.pack(fill=tk.X, pady=(0, 6))
-        self.auto_select_check = ttk.Checkbutton(
-            auto_sel_row,
-            text="启用自动选人",
-            variable=self.auto_select_var,
-        )
-        self.auto_select_check.pack(side=tk.LEFT)
-
-        team_row = ttk.Frame(team_frame)
-        team_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(team_row, text="当前阵容:").pack(side=tk.LEFT)
-        self.team_combo = ttk.Combobox(
-            team_row,
-            textvariable=self.current_team_var,
-            state="readonly",
-            width=15
-        )
-        self.team_combo.pack(side=tk.LEFT, padx=(8, 8))
-        self.team_combo.bind("<<ComboboxSelected>>", self._on_team_select)
-        self.edit_team_btn = ttk.Button(
-            team_row,
-            text="编辑阵容",
-            command=self._edit_team,
-            width=10
-        )
-        self.edit_team_btn.pack(side=tk.LEFT, padx=(0, 8))
-        self.add_team_btn = ttk.Button(
-            team_row,
-            text="新增",
-            command=self._add_team,
-            width=6
-        )
-        self.add_team_btn.pack(side=tk.LEFT, padx=(0, 8))
-        self.del_team_btn = ttk.Button(
-            team_row,
-            text="删除",
-            command=self._delete_team,
-            width=6
-        )
-        self.del_team_btn.pack(side=tk.LEFT)
-
-        rotate_row = ttk.Frame(team_frame)
-        rotate_row.pack(fill=tk.X)
-        self.rotate_check = ttk.Checkbutton(
-            rotate_row,
-            text="阵容轮换",
-            variable=self.rotate_team_var,
-        )
-        self.rotate_check.pack(side=tk.LEFT)
-        ttk.Label(rotate_row, text="每").pack(side=tk.LEFT, padx=(10, 0))
-        self.rotate_every_entry = ttk.Entry(
-            rotate_row,
-            textvariable=self.rotate_every_var,
-            width=5
-        )
-        self.rotate_every_entry.pack(side=tk.LEFT, padx=(5, 5))
-        ttk.Label(rotate_row, text="场换一套").pack(side=tk.LEFT)
-        self.rotate_loss_check = ttk.Checkbutton(
-            rotate_row,
-            text="仅战败时换",
-            variable=self.rotate_on_loss_var,
-        )
-        self.rotate_loss_check.pack(side=tk.LEFT, padx=(15, 0))
-
-        log_frame = ttk.LabelFrame(main_frame, text="运行日志", padding="5")
+        # 日志面板
+        log_frame = ttk.LabelFrame(right_frame, text="运行日志", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True)
-
         self.log_text = scrolledtext.ScrolledText(
             log_frame,
-            height=12,
+            height=18,
             font=("Consolas", 9),
             state=tk.DISABLED,
             wrap=tk.WORD
         )
         self.log_text.pack(fill=tk.BOTH, expand=True)
 
+        # ===================== 左侧：Tab 功能面板 =====================
+        tab_frame = ttk.Frame(left_frame)
+        tab_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        self.notebook = ttk.Notebook(tab_frame)
+        self.notebook.pack(fill=tk.BOTH, expand=True)
+
+        # --- Tab 1: 斗技挂机 ---
+        douji_tab = ttk.Frame(self.notebook, padding="8")
+        self.notebook.add(douji_tab, text="⚔ 斗技挂机")
+        self._build_douji_tab(douji_tab)
+
+        # --- Tab 2: 御魂自动化 ---
+        spirit_tab = ttk.Frame(self.notebook, padding="8")
+        self.notebook.add(spirit_tab, text="🍖 御魂自动化")
+        self._build_spirit_tab(spirit_tab)
+
+        # --- Tab 3: 设置 ---
+        settings_tab = ttk.Frame(self.notebook, padding="8")
+        self.notebook.add(settings_tab, text="⚙ 设置")
+        self._build_settings_tab(settings_tab)
+
+        # 底部提示
         tip_label = ttk.Label(
-            main_frame,
-            text=f"提示: 全局热键 F6 一键启停 | 关闭窗口自动缩到托盘",
+            left_frame,
+            text="全局热键 F6 一键启停 | 关闭窗口自动缩到托盘",
             foreground="gray",
-            font=("Microsoft YaHei", 9)
+            font=("Microsoft YaHei", 8)
         )
-        tip_label.pack(pady=(8, 0))
+        tip_label.pack(side=tk.BOTTOM, pady=(5, 0))
+
+    def _build_douji_tab(self, parent):
+        # 状态
+        status_frame = ttk.LabelFrame(parent, text="斗技控制", padding="8")
+        status_frame.pack(fill=tk.X, pady=(0, 8))
+
+        button_frame = ttk.Frame(status_frame)
+        button_frame.pack(fill=tk.X)
+
+        self.douji_start_btn = ttk.Button(
+            button_frame, text="开始挂机 (F6)", command=self._start_douji, width=14
+        )
+        self.douji_start_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.douji_stop_btn = ttk.Button(
+            button_frame, text="停止挂机 (F6)", command=self._stop_douji, width=14, state=tk.DISABLED
+        )
+        self.douji_stop_btn.pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(
+            button_frame, text="检测窗口", command=self._detect_window, width=10
+        ).pack(side=tk.LEFT)
+
+        # 挂机设置
+        settings_frame = ttk.LabelFrame(parent, text="挂机设置", padding="8")
+        settings_frame.pack(fill=tk.X, pady=(0, 8))
+
+        # 灵敏度
+        conf_frame = ttk.Frame(settings_frame)
+        conf_frame.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(conf_frame, text="识别灵敏度:").pack(side=tk.LEFT)
+        self.conf_scale = ttk.Scale(
+            conf_frame, from_=0.5, to=0.99, orient=tk.HORIZONTAL,
+            variable=self.confidence_var, length=200,
+            command=self._on_confidence_change,
+        )
+        self.conf_scale.pack(side=tk.LEFT, padx=(8, 8))
+        self.conf_label = ttk.Label(conf_frame, text=f"{DEFAULT_CONFIDENCE:.2f}")
+        self.conf_label.pack(side=tk.LEFT)
+
+        # 限制
+        limit_frame = ttk.Frame(settings_frame)
+        limit_frame.pack(fill=tk.X)
+        ttk.Label(limit_frame, text="最多场次:").pack(side=tk.LEFT)
+        self.battles_entry = ttk.Entry(limit_frame, textvariable=self.max_battles_var, width=8)
+        self.battles_entry.pack(side=tk.LEFT, padx=(5, 5))
+        ttk.Label(limit_frame, text="(0=不限制)").pack(side=tk.LEFT)
+        ttk.Label(limit_frame, text="分钟:").pack(side=tk.LEFT, padx=(15, 0))
+        self.minutes_entry = ttk.Entry(limit_frame, textvariable=self.max_minutes_var, width=8)
+        self.minutes_entry.pack(side=tk.LEFT, padx=(5, 5))
+        ttk.Label(limit_frame, text="(0=不限制)").pack(side=tk.LEFT)
+
+        # 阵容设置
+        team_frame = ttk.LabelFrame(parent, text="阵容设置", padding="8")
+        team_frame.pack(fill=tk.X, pady=(0, 8))
+
+        auto_sel_row = ttk.Frame(team_frame)
+        auto_sel_row.pack(fill=tk.X, pady=(0, 4))
+        self.auto_select_check = ttk.Checkbutton(
+            auto_sel_row, text="启用自动选人", variable=self.auto_select_var,
+        )
+        self.auto_select_check.pack(side=tk.LEFT)
+
+        team_row = ttk.Frame(team_frame)
+        team_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(team_row, text="当前阵容:").pack(side=tk.LEFT)
+        self.team_combo = ttk.Combobox(
+            team_row, textvariable=self.current_team_var, state="readonly", width=15
+        )
+        self.team_combo.pack(side=tk.LEFT, padx=(8, 8))
+        self.team_combo.bind("<<ComboboxSelected>>", self._on_team_select)
+        self.edit_team_btn = ttk.Button(team_row, text="编辑", command=self._edit_team, width=6)
+        self.edit_team_btn.pack(side=tk.LEFT, padx=(0, 4))
+        self.add_team_btn = ttk.Button(team_row, text="新增", command=self._add_team, width=6)
+        self.add_team_btn.pack(side=tk.LEFT, padx=(0, 4))
+        self.del_team_btn = ttk.Button(team_row, text="删除", command=self._delete_team, width=6)
+        self.del_team_btn.pack(side=tk.LEFT)
+
+        rotate_row = ttk.Frame(team_frame)
+        rotate_row.pack(fill=tk.X)
+        self.rotate_check = ttk.Checkbutton(rotate_row, text="阵容轮换", variable=self.rotate_team_var)
+        self.rotate_check.pack(side=tk.LEFT)
+        ttk.Label(rotate_row, text="每").pack(side=tk.LEFT, padx=(10, 0))
+        self.rotate_every_entry = ttk.Entry(rotate_row, textvariable=self.rotate_every_var, width=5)
+        self.rotate_every_entry.pack(side=tk.LEFT, padx=(5, 5))
+        ttk.Label(rotate_row, text="场换一套").pack(side=tk.LEFT)
+        self.rotate_loss_check = ttk.Checkbutton(
+            rotate_row, text="仅战败时换", variable=self.rotate_on_loss_var,
+        )
+        self.rotate_loss_check.pack(side=tk.LEFT, padx=(15, 0))
+
+        # 工具按钮
+        tool_frame = ttk.Frame(parent)
+        tool_frame.pack(fill=tk.X, pady=(0, 5))
+        ttk.Button(tool_frame, text="打开模板目录", command=self._open_template_dir, width=14).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(tool_frame, text="重置统计", command=self._reset_stats, width=10).pack(side=tk.LEFT)
+
+    def _build_spirit_tab(self, parent):
+        frame = ttk.LabelFrame(parent, text="御魂控制", padding="8")
+        frame.pack(fill=tk.X, pady=(0, 8))
+
+        # 模式选择
+        mode_row = ttk.Frame(frame)
+        mode_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(mode_row, text="组队模式:").pack(side=tk.LEFT)
+        self.spirit_mode_combo = ttk.Combobox(
+            mode_row, textvariable=self.spirit_mode_var, state="readonly", width=8,
+            values=["队长", "队员"],
+        )
+        self.spirit_mode_combo.pack(side=tk.LEFT, padx=(8, 0))
+
+        # 层数和次数
+        param_row = ttk.Frame(frame)
+        param_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(param_row, text="层数:").pack(side=tk.LEFT)
+        self.spirit_floor_entry = ttk.Entry(param_row, textvariable=self.spirit_floor_var, width=6)
+        self.spirit_floor_entry.pack(side=tk.LEFT, padx=(5, 10))
+        ttk.Label(param_row, text="次数:").pack(side=tk.LEFT)
+        self.spirit_rounds_entry = ttk.Entry(param_row, textvariable=self.spirit_rounds_var, width=6)
+        self.spirit_rounds_entry.pack(side=tk.LEFT, padx=(5, 0))
+
+        # 阵容
+        team_row = ttk.Frame(frame)
+        team_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(team_row, text="阵容:").pack(side=tk.LEFT)
+        self.spirit_team_combo = ttk.Combobox(
+            team_row, textvariable=self.current_team_var, state="readonly", width=15
+        )
+        self.spirit_team_combo.pack(side=tk.LEFT, padx=(8, 0))
+
+        # 按钮
+        btn_row = ttk.Frame(frame)
+        btn_row.pack(fill=tk.X)
+        self.spirit_start_btn = ttk.Button(
+            btn_row, text="开始御魂", command=self._start_spirit, width=12
+        )
+        self.spirit_start_btn.pack(side=tk.LEFT, padx=(0, 5))
+        self.spirit_stop_btn = ttk.Button(
+            btn_row, text="停止御魂", command=self._stop_spirit, width=12, state=tk.DISABLED
+        )
+        self.spirit_stop_btn.pack(side=tk.LEFT)
+
+    def _build_settings_tab(self, parent):
+        frame = ttk.LabelFrame(parent, text="通用设置", padding="8")
+        frame.pack(fill=tk.X)
+        ttk.Label(frame, text="操作记录保存在 logs/ 目录下", font=("Microsoft YaHei", 9)).pack(pady=10)
+        ttk.Label(frame, text="格式: operation_YYYYMMDD_HHMMSS.md", foreground="gray").pack()
+
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=15)
+
+        info_frame = ttk.Frame(frame)
+        info_frame.pack(fill=tk.X)
+        ttk.Label(info_frame, text="全局热键:", font=("Microsoft YaHei", 9, "bold")).pack(anchor=tk.W)
+        ttk.Label(info_frame, text="F6 — 一键启停斗技/御魂", foreground="gray").pack(pady=2)
+        ttk.Label(info_frame, text="关闭窗口 — 最小化到托盘", foreground="gray").pack(pady=2)
+
+        ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=15)
+
+        ttk.Button(frame, text="打开日志目录", command=self._open_log_dir, width=14).pack(side=tk.LEFT)
+        ttk.Button(frame, text="打开模板目录", command=self._open_template_dir, width=14).pack(side=tk.LEFT, padx=(10, 0))
 
     def _setup_tray(self):
         try:
@@ -325,10 +356,12 @@ class DoujiApp:
         self.hotkey.start()
 
     def _toggle_bot(self):
-        if self.bot.running:
-            self.root.after(0, self._stop_bot)
+        if self.douji_bot.running:
+            self.root.after(0, self._stop_douji)
+        elif self.spirit_bot.running:
+            self.root.after(0, self._stop_spirit)
         else:
-            self.root.after(0, self._start_bot)
+            self.root.after(0, self._start_douji)
 
     def _on_close(self):
         if self.tray:
@@ -348,7 +381,11 @@ class DoujiApp:
 
     def _quit_app(self):
         try:
-            self.bot.stop()
+            self.douji_bot.stop()
+        except:
+            pass
+        try:
+            self.spirit_bot.stop()
         except:
             pass
         try:
@@ -391,7 +428,7 @@ class DoujiApp:
             self._append_log("未找到阴阳师游戏窗口，请先启动游戏")
             messagebox.showwarning("提示", "未找到阴阳师游戏窗口\n\n请确保：\n1. 已启动阴阳师游戏客户端\n2. 游戏窗口处于可见状态")
 
-    def _start_bot(self):
+    def _start_douji(self):
         try:
             max_battles = int(self.max_battles_var.get() or 0)
         except ValueError:
@@ -416,14 +453,42 @@ class DoujiApp:
             rotate_every = 3
         rotate_on_loss = self.rotate_on_loss_var.get()
 
-        self.bot.set_auto_select(auto_select)
-        self.bot.set_team_rotate(rotate_team, every=rotate_every, on_loss=rotate_on_loss)
+        self.douji_bot.set_auto_select(auto_select)
+        self.douji_bot.set_team_rotate(rotate_team, every=rotate_every, on_loss=rotate_on_loss)
 
-        success = self.bot.start(max_battles=max_battles, max_minutes=max_minutes)
+        success = self.douji_bot.start(max_battles=max_battles, max_minutes=max_minutes)
         if success:
-            self.start_button.config(state=tk.DISABLED)
-            self.stop_button.config(state=tk.NORMAL)
-            self.detect_button.config(state=tk.DISABLED)
+            self._set_douji_ui_running(True)
+
+    def _stop_douji(self):
+        self.douji_bot.stop()
+        self._set_douji_ui_running(False)
+
+    def _start_spirit(self):
+        try:
+            floor_num = int(self.spirit_floor_var.get() or 8)
+        except ValueError:
+            floor_num = 8
+        try:
+            rounds = int(self.spirit_rounds_var.get() or 10)
+        except ValueError:
+            rounds = 10
+
+        mode = self.spirit_mode_var.get()
+        self.spirit_bot.set_params(floor_num=floor_num, rounds=rounds, mode=mode.lower())
+
+        success = self.spirit_bot.start()
+        if success:
+            self._set_spirit_ui_running(True)
+
+    def _stop_spirit(self):
+        self.spirit_bot.stop()
+        self._set_spirit_ui_running(False)
+
+    def _set_douji_ui_running(self, running):
+        if running:
+            self.douji_start_btn.config(state=tk.DISABLED)
+            self.douji_stop_btn.config(state=tk.NORMAL)
             self.auto_select_check.config(state=tk.DISABLED)
             self.rotate_check.config(state=tk.DISABLED)
             self.rotate_every_entry.config(state=tk.DISABLED)
@@ -432,20 +497,31 @@ class DoujiApp:
             self.edit_team_btn.config(state=tk.DISABLED)
             self.add_team_btn.config(state=tk.DISABLED)
             self.del_team_btn.config(state=tk.DISABLED)
+        else:
+            self.douji_start_btn.config(state=tk.NORMAL)
+            self.douji_stop_btn.config(state=tk.DISABLED)
+            self.auto_select_check.config(state=tk.NORMAL)
+            self.rotate_check.config(state=tk.NORMAL)
+            self.rotate_every_entry.config(state=tk.NORMAL)
+            self.rotate_loss_check.config(state=tk.NORMAL)
+            self.team_combo.config(state="readonly")
+            self.edit_team_btn.config(state=tk.NORMAL)
+            self.add_team_btn.config(state=tk.NORMAL)
+            self.del_team_btn.config(state=tk.NORMAL)
 
-    def _stop_bot(self):
-        self.bot.stop()
-        self.start_button.config(state=tk.NORMAL)
-        self.stop_button.config(state=tk.DISABLED)
-        self.detect_button.config(state=tk.NORMAL)
-        self.auto_select_check.config(state=tk.NORMAL)
-        self.rotate_check.config(state=tk.NORMAL)
-        self.rotate_every_entry.config(state=tk.NORMAL)
-        self.rotate_loss_check.config(state=tk.NORMAL)
-        self.team_combo.config(state="readonly")
-        self.edit_team_btn.config(state=tk.NORMAL)
-        self.add_team_btn.config(state=tk.NORMAL)
-        self.del_team_btn.config(state=tk.NORMAL)
+    def _set_spirit_ui_running(self, running):
+        if running:
+            self.spirit_start_btn.config(state=tk.DISABLED)
+            self.spirit_stop_btn.config(state=tk.NORMAL)
+            self.spirit_mode_combo.config(state=tk.DISABLED)
+            self.spirit_floor_entry.config(state=tk.DISABLED)
+            self.spirit_rounds_entry.config(state=tk.DISABLED)
+        else:
+            self.spirit_start_btn.config(state=tk.NORMAL)
+            self.spirit_stop_btn.config(state=tk.DISABLED)
+            self.spirit_mode_combo.config(state="readonly")
+            self.spirit_floor_entry.config(state=tk.NORMAL)
+            self.spirit_rounds_entry.config(state=tk.NORMAL)
 
     def _reset_stats(self):
         if messagebox.askyesno("确认", "确定要重置本次统计数据吗？"):
@@ -466,10 +542,17 @@ class DoujiApp:
         self.root.after(0, _append)
 
     def _update_state(self, state):
-        def _update():
-            self.state_var.set(state)
-            self.battle_count_var.set(str(self.bot.battle_count))
+        """兼容旧接口，实际不再使用。"""
+        pass
 
+    def _update_douji_state(self, state):
+        def _update():
+            self.douji_state_var.set(state)
+        self.root.after(0, _update)
+
+    def _update_spirit_state(self, state):
+        def _update():
+            self.spirit_state_var.set(state)
         self.root.after(0, _update)
 
     def _update_stats_display(self, stats_summary):
@@ -489,9 +572,11 @@ class DoujiApp:
                 prefix = "✓ " if team.get('enabled', True) else "✗ "
                 teams.append(prefix + team.get('name', f'阵容{i+1}'))
         self.team_combo['values'] = teams
+        self.spirit_team_combo['values'] = teams
         current_idx = self.team_manager.current_team_index
         if 0 <= current_idx < len(teams):
             self.team_combo.current(current_idx)
+            self.spirit_team_combo.current(current_idx)
 
     def _on_team_select(self, event=None):
         idx = self.team_combo.current()
@@ -579,6 +664,12 @@ class DoujiApp:
         btn_frame.grid(row=8, column=0, columnspan=2, pady=(15, 0))
         ttk.Button(btn_frame, text="保存", command=save, width=12).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(btn_frame, text="取消", command=editor.destroy, width=12).pack(side=tk.LEFT)
+
+    def _open_log_dir(self):
+        log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+        os.startfile(log_dir)
 
     def _open_template_dir(self):
         from config import TEMPLATE_DIR

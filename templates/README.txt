@@ -1,8 +1,18 @@
 请将以下模板图片放入此文件夹（必须为PNG格式）：
 
+斗技挂机模板：
 1. battle_button.png  - 斗技匹配界面的"战"按钮（右下角大圆形按钮）
-2. confirm.png       - 选人/禁选界面的"确定"按钮（右下角鼓形按钮）
-3. manual.png        - 战斗界面的"手动"按钮（左下角）
+2. confirm.png        - 选人/禁选界面的"确定"按钮（右下角鼓形按钮）
+3. manual.png         - 战斗界面的"手动"按钮（左下角）
+4. victory.png        - 结算画面的"胜利"按钮
+5. defeat.png         - 结算画面的"失败"按钮
+6. search_button.png  - 选人界面左下角放大镜搜索按钮（自动选人用）
+
+御魂副本模板：
+7. spirit_entry.png   - 御魂副本入口按钮（在副本选择界面）
+8. spirit_confirm.png - 御魂确认/继续按钮
+9. spirit_ready.png   - 已就绪按钮（队伍准备界面）
+10. spirit_start.png  - 队长发起进攻按钮
 
 模板制作说明：
 1. 截图时尽量只截取按钮本身，包含少量背景即可
