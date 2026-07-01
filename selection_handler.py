@@ -1,4 +1,5 @@
 import time
+import random
 import win32clipboard
 import win32con
 import win32api
@@ -95,14 +96,18 @@ class SelectionHandler:
             return True
 
         self._click_search_button(screen)
-        time.sleep(0.3)
+        time.sleep(random.uniform(0.2, 0.4))
 
         screen = self.window_manager.screenshot()
         if screen is None:
             return False
 
         self._input_text(name)
-        time.sleep(0.5)
+        time.sleep(random.uniform(0.1, 0.3))
+
+        # 回车确认搜索，触发结果列表
+        self._press_enter()
+        time.sleep(random.uniform(0.5, 0.8))
 
         screen = self.window_manager.screenshot()
         if screen is None:
@@ -112,7 +117,7 @@ class SelectionHandler:
         target_y = self._get_drag_target(screen)
 
         self.auto_clicker.drag_up(card_x, card_y, distance=card_y - target_y, duration=0.6)
-        time.sleep(0.5)
+        time.sleep(random.uniform(0.4, 0.7))
 
         return True
 
@@ -121,14 +126,18 @@ class SelectionHandler:
             return False
 
         self._click_search_button(screen)
-        time.sleep(0.3)
+        time.sleep(random.uniform(0.2, 0.4))
 
         screen = self.window_manager.screenshot()
         if screen is None:
             return False
 
         self._input_text(name)
-        time.sleep(0.5)
+        time.sleep(random.uniform(0.1, 0.3))
+
+        # 回车确认搜索，触发结果列表
+        self._press_enter()
+        time.sleep(random.uniform(0.5, 0.8))
 
         screen = self.window_manager.screenshot()
         if screen is None:
@@ -138,7 +147,7 @@ class SelectionHandler:
         target_y = self._get_drag_target(screen)
 
         self.auto_clicker.drag_up(card_x, card_y, distance=card_y - target_y, duration=0.6)
-        time.sleep(0.5)
+        time.sleep(random.uniform(0.4, 0.7))
 
         return True
 
@@ -163,7 +172,7 @@ class SelectionHandler:
             success = self.select_shikigami(name, screen)
             if success:
                 count += 1
-            time.sleep(0.8)
+            time.sleep(random.uniform(0.6, 1.0))
             screen = self.window_manager.screenshot()
 
         log(f"已选择 {count} 个式神")
@@ -171,6 +180,6 @@ class SelectionHandler:
         if onmyouji:
             log(f"正在选择阴阳师: {onmyouji}")
             self.select_onmyouji(onmyouji, screen)
-            time.sleep(0.8)
+            time.sleep(random.uniform(0.6, 1.0))
 
         return True

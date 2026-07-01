@@ -158,6 +158,7 @@ class DoujiBot:
         return False
 
     def _run_loop(self):
+        screenshot_failures = 0
         while not self.stop_event.is_set():
             try:
                 if self._check_stop_conditions():
@@ -167,10 +168,22 @@ class DoujiBot:
                 screen = self.window_manager.screenshot()
 
                 if screen is None:
-                    self.log("截图失败，重试中...")
+                    screenshot_failures += 1
+                    if screenshot_failures >= 5:
+                        self.log("截图连续失败，尝试重新查找游戏窗口...")
+                        if self.window_manager.find_window():
+                            self.log("成功重新找到游戏窗口")
+                            screenshot_failures = 0
+                        else:
+                            self.log("无法找到游戏窗口，挂机已暂停")
+                            self.stop_event.wait(min(SCAN_INTERVAL * 10, 30))
+                            continue
+                    else:
+                        self.log(f"截图失败 ({screenshot_failures}/5)，重试中...")
                     time.sleep(SCAN_INTERVAL)
                     continue
 
+                screenshot_failures = 0
                 self._process_state(screen)
                 self._update_stats()
 
@@ -217,8 +230,8 @@ class DoujiBot:
             self.log("已点击'战'，进入选人/等待阶段...")
         else:
             self.retry_count += 1
-            if self.retry_count >= 10:
-                self.log("未找到'战'按钮，请确保在斗技匹配界面")
+            if self.retry_count >= 30:
+                self.log("⚠ 已超过30秒未找到'战'按钮，请确保在斗技匹配界面")
                 self.retry_count = 0
 
     def _handle_selecting(self, screen):
@@ -231,19 +244,15 @@ class DoujiBot:
             self.set_state(DoujiState.IN_BATTLE)
             return
 
-        if self.auto_select and not self._selecting_done:
-            confirm_result = self.image_recognition.find_template(
-                screen, 'confirm', confidence=DEFAULT_CONFIDENCE
-            )
-            if confirm_result:
-                self.set_state(DoujiState.AUTO_SELECT)
-                return
-
         confirm_result = self.image_recognition.find_template(
             screen, 'confirm', confidence=DEFAULT_CONFIDENCE
         )
 
         if confirm_result:
+            if self.auto_select and not self._selecting_done:
+                self.set_state(DoujiState.AUTO_SELECT)
+                return
+
             self.log(f"找到'确定'按钮，置信度: {confirm_result['confidence']:.2f}")
             self.auto_clicker.click_match_result(confirm_result)
             self.log("已点击'确定'，等待对手...")
@@ -305,28 +314,30 @@ class DoujiBot:
                 self.set_state(DoujiState.BATTLE_END)
                 self.retry_count = 0
 
-    def _detect_battle_result(self, screen):
+    def _dismiss_settlement(self, screen):
+        """查找并点击结算画面上的胜利/失败按钮，返回结果类型。"""
         victory_result = self.image_recognition.find_template(
             screen, 'victory', confidence=DEFAULT_CONFIDENCE
         )
         if victory_result:
+            self.log(f"找到'胜利'按钮，置信度: {victory_result['confidence']:.2f}")
+            self.auto_clicker.click_match_result(victory_result)
             return 'victory'
 
         defeat_result = self.image_recognition.find_template(
             screen, 'defeat', confidence=DEFAULT_CONFIDENCE
         )
         if defeat_result:
+            self.log(f"找到'失败'按钮，置信度: {defeat_result['confidence']:.2f}")
+            self.auto_clicker.click_match_result(defeat_result)
             return 'defeat'
 
         return None
 
     def _handle_battle_end(self, screen):
-        battle_btn = self.image_recognition.find_template(
-            screen, 'battle_button', confidence=DEFAULT_CONFIDENCE
-        )
-
-        if battle_btn:
-            result = self._detect_battle_result(screen)
+        # ① 先尝试识别结算画面（胜利/失败按钮）
+        result = self._dismiss_settlement(screen)
+        if result:
             is_victory = (result == 'victory')
 
             if self.stats and self.stats.battle_start_time:
@@ -334,19 +345,30 @@ class DoujiBot:
 
             if result == 'victory':
                 self.log("战斗胜利！")
-            elif result == 'defeat':
-                self.log("战斗失败")
             else:
-                self.log("战斗结束")
+                self.log("战斗失败")
 
             self._maybe_rotate_team(is_victory)
-
             self._update_stats()
             self.set_state(DoujiState.FIND_MATCH)
             return
 
+        # ② 结算画面没找到 → 检查是否已经回到匹配界面（有战按钮）
+        battle_btn = self.image_recognition.find_template(
+            screen, 'battle_button', confidence=DEFAULT_CONFIDENCE
+        )
+        if battle_btn:
+            # 可能跳过了结算画面（快速自动跳转），仍记录胜负
+            if self.stats and self.stats.battle_start_time:
+                self.stats.end_battle(None)  # 未知结果
+            self.log("检测到已回到匹配界面（结算画面可能已跳过）")
+            self._update_stats()
+            self.set_state(DoujiState.FIND_MATCH)
+            return
+
+        # ③ 都不是 → 点击屏幕中央跳过可能的中间画面
         cx, cy = self._get_screen_center(screen)
-        self.log(f"结算中... 点击屏幕中央跳过")
+        self.log("结算中... 点击屏幕中央跳过")
         self.auto_clicker.click(cx, cy)
         time.sleep(CLICK_INTERVAL)
 
