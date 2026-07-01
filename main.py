@@ -201,6 +201,9 @@ class DoujiApp:
         ttk.Button(
             button_frame, text="检测窗口", command=self._detect_window, width=10
         ).pack(side=tk.LEFT)
+        ttk.Button(
+            button_frame, text="选择窗口", command=self._show_window_selector, width=10
+        ).pack(side=tk.LEFT)
 
         # 挂机设置
         settings_frame = ttk.LabelFrame(parent, text="挂机设置", padding="8")
@@ -296,7 +299,7 @@ class DoujiApp:
         ttk.Label(param_row, text="层数:").pack(side=tk.LEFT)
         self.spirit_floor_entry = ttk.Entry(param_row, textvariable=self.spirit_floor_var, width=6)
         self.spirit_floor_entry.pack(side=tk.LEFT, padx=(5, 10))
-        ttk.Label(param_row, text="(1-15, 10+需下滑)").pack(side=tk.LEFT, foreground="gray")
+        tk.Label(param_row, text="(1-15, 10+需下滑)", fg="gray").pack(side=tk.LEFT, padx=(5, 0))
         ttk.Label(param_row, text="次数:").pack(side=tk.LEFT, padx=(15, 0))
         self.spirit_rounds_entry = ttk.Entry(param_row, textvariable=self.spirit_rounds_var, width=6)
         self.spirit_rounds_entry.pack(side=tk.LEFT, padx=(5, 0))
@@ -310,15 +313,6 @@ class DoujiApp:
             values=["普通御魂", "超级御魂", "超级御魂2", "超级御魂3"],
         )
         self.spirit_layer_combo.pack(side=tk.LEFT, padx=(8, 0))
-
-        # 阵容
-        team_row = ttk.Frame(frame)
-        team_row.pack(fill=tk.X, pady=(0, 6))
-        ttk.Label(team_row, text="阵容:").pack(side=tk.LEFT)
-        self.spirit_team_combo = ttk.Combobox(
-            team_row, textvariable=self.current_team_var, state="readonly", width=15
-        )
-        self.spirit_team_combo.pack(side=tk.LEFT, padx=(8, 0))
 
         # 按钮
         btn_row = ttk.Frame(frame)
@@ -348,6 +342,7 @@ class DoujiApp:
 
         ttk.Separator(frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=15)
 
+        ttk.Button(frame, text="手动框选区域", command=self._manual_region_select, width=14).pack(side=tk.LEFT)
         ttk.Button(frame, text="打开日志目录", command=self._open_log_dir, width=14).pack(side=tk.LEFT)
         ttk.Button(frame, text="打开模板目录", command=self._open_template_dir, width=14).pack(side=tk.LEFT, padx=(10, 0))
 
@@ -429,6 +424,17 @@ class DoujiApp:
             self._append_log("请将模板截图放入 templates 文件夹")
         else:
             self._append_log("核心模板图片加载成功")
+
+    def _show_window_selector(self):
+        self.window_manager.show_window_selector_dialog(self.root)
+
+    def _manual_region_select(self):
+        """手动框选模式。"""
+        if self.window_manager.manual_region_select(self.root):
+            self._append_log(f"已手动框选区域: {self.window_manager.manual_region}")
+            self._append_log("截图模式已切换为手动框选")
+        else:
+            self._append_log("手动框选已取消")
 
     def _detect_window(self):
         if self.window_manager.find_window():
@@ -583,11 +589,9 @@ class DoujiApp:
                 prefix = "✓ " if team.get('enabled', True) else "✗ "
                 teams.append(prefix + team.get('name', f'阵容{i+1}'))
         self.team_combo['values'] = teams
-        self.spirit_team_combo['values'] = teams
         current_idx = self.team_manager.current_team_index
         if 0 <= current_idx < len(teams):
             self.team_combo.current(current_idx)
-            self.spirit_team_combo.current(current_idx)
 
     def _on_team_select(self, event=None):
         idx = self.team_combo.current()

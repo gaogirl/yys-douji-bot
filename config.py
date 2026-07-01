@@ -10,6 +10,11 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
 WINDOW_TITLE_KEYWORDS = ['阴阳师', 'onmyoji']
 WINDOW_PROCESS_NAMES = ['onmyoji.exe', 'netease games', '阴阳师']
+
+# 模拟器扩展关键词（用于宽松匹配，覆盖常见模拟器进程/窗口名）
+EMULATOR_TITLE_KEYWORDS = ['阴阳师', 'onmyoji', 'MuMu', '网易MuMu', '雷电', 'Nox', '夜神', '蓝叠', 'BlueStacks', '模拟器', '安卓']
+EMULATOR_PROCESS_NAMES = ['onmyoji.exe', 'netease games', '阴阳师', 'noremu.exe', 'momu.exe', 'mumu.exe', 'nox.exe', 'noxupdater.exe', 'bshaper.exe', 'stacks.exe', 'hypervisor.exe', 'nox_android.exe', 'android_turing.exe', 'android_boot_service.exe']
+
 MIN_WINDOW_WIDTH = 600
 MIN_WINDOW_HEIGHT = 400
 
