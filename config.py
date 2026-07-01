@@ -1,0 +1,51 @@
+import os
+import sys
+
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
+
+WINDOW_TITLE_KEYWORDS = ['阴阳师', 'onmyoji']
+WINDOW_PROCESS_NAMES = ['onmyoji.exe', 'netease games', '阴阳师']
+MIN_WINDOW_WIDTH = 600
+MIN_WINDOW_HEIGHT = 400
+
+DEFAULT_CONFIDENCE = 0.8
+SCAN_INTERVAL = 1.0
+CLICK_DELAY = 0.5
+
+TEMPLATES = {
+    'battle_button': 'battle_button.png',
+    'confirm': 'confirm.png',
+    'manual': 'manual.png',
+    'victory': 'victory.png',
+    'defeat': 'defeat.png',
+    'search_button': 'search_button.png',
+}
+
+REGIONS = {
+    'battle_button': None,
+    'confirm': None,
+    'manual': None,
+}
+
+MAX_RETRIES = 10
+CLICK_INTERVAL = 2.0
+
+HOTKEY_TOGGLE = 'f6'
+
+ANTI_DETECT = {
+    'click_offset_range': 8,
+    'click_duration_min': 0.08,
+    'click_duration_max': 0.15,
+    'post_click_delay_min': 0.3,
+    'post_click_delay_max': 0.8,
+    'mouse_move_steps': 20,
+    'mouse_move_duration': 0.3,
+    'scan_interval_jitter': 0.3,
+}
+
+STATS_FILE = 'stats.json'
