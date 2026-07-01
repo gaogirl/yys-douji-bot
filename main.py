@@ -39,7 +39,6 @@ class DoujiApp:
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, f"operation_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md")
         self.md_logger = MdLogger(log_file)
-        self.log(f"操作记录已保存至: {log_file}")
 
         self.douji_bot = DoujiBot(
             self.window_manager,
