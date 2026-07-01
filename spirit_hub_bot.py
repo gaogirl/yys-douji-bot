@@ -12,7 +12,6 @@ from config import (
     ANTI_DETECT,
     SPIRIT_FLOOR_NUM,
     SPIRIT_ROUNDS,
-    SPIRIT_MODE,
 )
 
 
