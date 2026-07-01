@@ -79,6 +79,7 @@ class DoujiApp:
         self.spirit_floor_var = tk.StringVar(value="8")
         self.spirit_rounds_var = tk.StringVar(value="10")
         self.spirit_mode_var = tk.StringVar(value="队长")
+        self.spirit_layer_var = tk.StringVar(value="普通御魂")
 
         self._create_widgets()
         self._setup_tray()
@@ -295,9 +296,20 @@ class DoujiApp:
         ttk.Label(param_row, text="层数:").pack(side=tk.LEFT)
         self.spirit_floor_entry = ttk.Entry(param_row, textvariable=self.spirit_floor_var, width=6)
         self.spirit_floor_entry.pack(side=tk.LEFT, padx=(5, 10))
-        ttk.Label(param_row, text="次数:").pack(side=tk.LEFT)
+        ttk.Label(param_row, text="(1-15, 10+需下滑)").pack(side=tk.LEFT, foreground="gray")
+        ttk.Label(param_row, text="次数:").pack(side=tk.LEFT, padx=(15, 0))
         self.spirit_rounds_entry = ttk.Entry(param_row, textvariable=self.spirit_rounds_var, width=6)
         self.spirit_rounds_entry.pack(side=tk.LEFT, padx=(5, 0))
+
+        # 御魂类型
+        layer_row = ttk.Frame(frame)
+        layer_row.pack(fill=tk.X, pady=(0, 6))
+        ttk.Label(layer_row, text="御魂类型:").pack(side=tk.LEFT)
+        self.spirit_layer_combo = ttk.Combobox(
+            layer_row, textvariable=self.spirit_layer_var, state="readonly", width=12,
+            values=["普通御魂", "超级御魂", "超级御魂2", "超级御魂3"],
+        )
+        self.spirit_layer_combo.pack(side=tk.LEFT, padx=(8, 0))
 
         # 阵容
         team_row = ttk.Frame(frame)

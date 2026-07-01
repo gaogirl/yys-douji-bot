@@ -32,9 +32,8 @@ TEMPLATES = {
 }
 
 # 御魂副本默认配置
-SPIRIT_FLOOR_NUM = 8       # 默认刷的层数
+SPIRIT_FLOOR_NUM = 8       # 默认刷的层数（1-15）
 SPIRIT_ROUNDS = 10         # 默认刷的次数
-SPIRIT_MODE = 'coordinate'  # 选层模式: 'template' 或 'coordinate'
 
 REGIONS = {
     'battle_button': None,

@@ -203,19 +203,32 @@ class SpiritHubBot:
         return True
 
     def _select_floor(self, screen):
-        """选择层数，支持模板匹配和坐标计算两种模式。"""
-        if SPIRIT_MODE == 'template':
-            # TODO: 模板匹配层数按钮
-            pass
-
-        # 坐标计算模式：根据层数计算点击位置
-        # 假设层数按钮排列在右侧，从上到下每层间隔约 h/12
+        """选择层数。1-9层直接点击，10-15层需要先下滑滚动才能看到。"""
         w, h = self.window_manager.get_window_size()
-        floor_y = int(h * 0.15 + (self.floor_num - 1) * (h * 0.07))
-        floor_x = int(w * 0.82)
-        self.log(f"选择{self.floor_num}层 ({floor_x}, {floor_y})")
-        self.auto_clicker.click(floor_x, floor_y)
-        self._md_log("选择", f"选择{self.floor_num}层")
+
+        if self.floor_num <= 9:
+            # 1-9层：直接点击右侧对应位置
+            floor_x = int(w * 0.82)
+            floor_y = int(h * 0.15 + (self.floor_num - 1) * (h * 0.07))
+            self.log(f"选择{self.floor_num}层 ({floor_x}, {floor_y})")
+            self.auto_clicker.click(floor_x, floor_y)
+            self._md_log("选择", f"选择{self.floor_num}层")
+        else:
+            # 10-15层：先下滑滚动露出高层，再点击
+            scroll_start_y = int(h * 0.82)
+            scroll_distance = int(h * 0.35)
+            self.log(f"下滑滚动以显示{self.floor_num}层")
+            self.auto_clicker.drag_up(scroll_start_y, scroll_start_y, distance=scroll_distance, duration=0.8)
+            time.sleep(0.8)
+
+            # 滚动后再点击对应位置（10-15层的索引偏移）
+            adjusted_floor = self.floor_num - 9  # 10->1, 11->2...15->6
+            floor_x = int(w * 0.82)
+            floor_y = int(h * 0.15 + (adjusted_floor - 1) * (h * 0.07))
+            self.log(f"选择{self.floor_num}层 ({floor_x}, {floor_y})")
+            self.auto_clicker.click(floor_x, floor_y)
+            self._md_log("选择", f"下滑后选择{self.floor_num}层")
+
         time.sleep(0.5)
         return True
 
